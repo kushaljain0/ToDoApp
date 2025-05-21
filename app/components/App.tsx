@@ -5,12 +5,43 @@ import TodoFilter from './TodoFilter';
 import TodoList from './TodoList';
 import { generateId, filterTodos } from '../utils/todoUtils';
 
+// Helper to convert dd.mm.yyyy to yyyy-mm-dd
+function parseDDMMYYYY(dateStr: string): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('.');
+  if (parts.length !== 3) return dateStr;
+  const [dd, mm, yyyy] = parts;
+  return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+}
+
+// Migrate all tasks in localStorage to ISO date format
+function migrateTodosToISO(todos: any[]): any[] {
+  return todos.map(todo => {
+    if (todo.date && /^\d{2}\.\d{2}\.\d{4}$/.test(todo.date)) {
+      return { ...todo, date: parseDDMMYYYY(todo.date) };
+    }
+    return todo;
+  });
+}
+
+// Robust date parser for sorting
+function toDateObj(dateStr: string): Date {
+  if (!dateStr) return new Date('');
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(dateStr)) {
+    return new Date(parseDDMMYYYY(dateStr));
+  }
+  return new Date(dateStr);
+}
+
 const App: React.FC = () => {
   const [todos, setTodos] = useState<Todo[]>(() => {
     const saved = localStorage.getItem('todos');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        let parsed = JSON.parse(saved);
+        parsed = migrateTodosToISO(parsed);
+        localStorage.setItem('todos', JSON.stringify(parsed));
+        return parsed;
       } catch (e) {
         return [];
       }
@@ -55,7 +86,6 @@ const App: React.FC = () => {
 
   const sortedTodos = [...filteredTodos].sort((a, b) => {
     let comparison = 0;
-    
     switch (sort.field) {
       case 'completed':
         comparison = Number(a.completed) - Number(b.completed);
@@ -72,10 +102,9 @@ const App: React.FC = () => {
         comparison = priorityValues[a.priority] - priorityValues[b.priority];
         break;
       case 'date':
-        comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+        comparison = toDateObj(a.date).getTime() - toDateObj(b.date).getTime();
         break;
     }
-
     return sort.direction === 'asc' ? comparison : -comparison;
   });
 
@@ -97,17 +126,14 @@ const App: React.FC = () => {
   return (
     <div className="container">
       <h1>Todo App</h1>
-      
       <div className="section">
         <div className="section-header">Add Task</div>
         <TodoForm onAddTodo={addTodo} />
       </div>
-      
       <div className="section">
         <div className="section-header">Filter</div>
         <TodoFilter filter={filter} setFilter={setFilter} />
       </div>
-      
       <div className="section">
         <TodoList 
           todos={sortedTodos} 
